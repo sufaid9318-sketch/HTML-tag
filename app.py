@@ -1,7 +1,5 @@
-# app.py - Fully configured for public deployment
 """
-Bulk Meta Tag Extractor - Public Ready Version
-Configured for PythonAnywhere, Railway, or ngrok
+Bulk Meta Tag Extractor - Public Ready Version (No Pandas/Excel compilation issues)
 """
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_cors import CORS
@@ -17,35 +15,28 @@ from datetime import datetime
 from urllib.parse import urlparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
+import os
 
 app = Flask(__name__)
 CORS(app)
 
-# ==========================================
-# RATE LIMITING - For public access
-# ==========================================
+# Rate limiting for public security
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
     default_limits=["100 per day", "20 per hour"]
 )
 
-# Initialize limiter after app creation
-app.config['LIMITER_ENABLED'] = True
-
-# Store processing jobs
+# Store processing jobs in memory
 jobs = {}
 
-# ==========================================
-# Meta Extractor Class
-# ==========================================
 class MetaExtractor:
     """Extract meta tags from URLs"""
     
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         })
     
     def extract_meta(self, url):
@@ -81,7 +72,7 @@ class MetaExtractor:
         try:
             if not self.is_valid_url(url):
                 result['status'] = 'error'
-                result['error'] = 'Invalid URL'
+                result['error'] = 'Invalid URL format'
                 return result
             
             response = self.session.get(url, timeout=10, allow_redirects=True)
@@ -167,9 +158,6 @@ class MetaExtractor:
 
 extractor = MetaExtractor()
 
-# ==========================================
-# Processing Functions
-# ==========================================
 def process_urls(urls, job_id, max_workers=10):
     """Process multiple URLs in parallel"""
     jobs[job_id]['status'] = 'processing'
@@ -210,18 +198,13 @@ def process_urls(urls, job_id, max_workers=10):
     jobs[job_id]['results'] = results
     jobs[job_id]['completed_at'] = datetime.now().isoformat()
 
-# ==========================================
-# Flask Routes
-# ==========================================
 @app.route('/')
 def index():
-    """Main page"""
     return render_template('index.html')
 
 @app.route('/api/extract', methods=['POST'])
-@limiter.limit("10 per minute")  # Rate limit for public
+@limiter.limit("10 per minute")
 def extract_meta_tags():
-    """Extract meta tags from URLs"""
     data = request.json
     
     if not data or 'urls' not in data:
@@ -263,7 +246,6 @@ def extract_meta_tags():
 
 @app.route('/api/job/<job_id>')
 def get_job_status(job_id):
-    """Get job status and results"""
     if job_id not in jobs:
         return jsonify({'error': 'Job not found'}), 404
     
@@ -296,7 +278,6 @@ def get_job_status(job_id):
 
 @app.route('/api/export/<job_id>/<format>')
 def export_results(job_id, format):
-    """Export results"""
     if job_id not in jobs:
         return jsonify({'error': 'Job not found'}), 404
     
@@ -330,54 +311,8 @@ def export_results(job_id, format):
             download_name=f'meta_tags_{job_id}.json'
         )
     
-    elif format == 'excel':
-        try:
-            import pandas as pd
-            df = pd.DataFrame(results)
-            output = io.BytesIO()
-            with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                df.to_excel(writer, index=False, sheet_name='Meta Tags')
-            output.seek(0)
-            return send_file(
-                output,
-                mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                as_attachment=True,
-                download_name=f'meta_tags_{job_id}.xlsx'
-            )
-        except ImportError:
-            return jsonify({'error': 'Excel export requires pandas'}), 500
-    
-    return jsonify({'error': 'Invalid format'}), 400
+    return jsonify({'error': 'Invalid format (CSV and JSON supported)'}), 400
 
-@app.route('/api/stats')
-def get_stats():
-    """Get system statistics"""
-    total_jobs = len(jobs)
-    completed_jobs = sum(1 for j in jobs.values() if j['status'] == 'completed')
-    processing_jobs = sum(1 for j in jobs.values() if j['status'] == 'processing')
-    total_urls = sum(j['total'] for j in jobs.values())
-    total_success = sum(j['success'] for j in jobs.values())
-    total_errors = sum(j['errors'] for j in jobs.values())
-    
-    return jsonify({
-        'total_jobs': total_jobs,
-        'completed_jobs': completed_jobs,
-        'processing_jobs': processing_jobs,
-        'total_urls': total_urls,
-        'total_success': total_success,
-        'total_errors': total_errors,
-        'success_rate': round((total_success / total_urls * 100), 2) if total_urls > 0 else 0
-    })
-
-# ==========================================
-# Main Entry Point
-# ==========================================
 if __name__ == '__main__':
-    # PythonAnywhere requires host=0.0.0.0 and port=8080
-    # Railway/Railway automatically uses port
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
-
-# For local development
-# if __name__ == '__main__':
-#     app.run(debug=True, host='0.0.0.0', port=5000)
