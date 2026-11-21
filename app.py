@@ -1,5 +1,5 @@
 """
-Bulk Meta Tag Extractor - Handles duplicate URLs and fast processing
+Bulk Meta Tag Extractor - With 5s Timeout Safeguard for Heavy Sites
 """
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_cors import CORS
@@ -29,23 +29,18 @@ limiter = Limiter(
 jobs = {}
 
 class MetaExtractor:
-    """Extract meta tags from URLs with caching for duplicates"""
-    
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         })
-        self.cache = {} # Cache results for duplicate URLs in the same job
+        self.cache = {}
         self.cache_lock = threading.Lock()
     
     def extract_meta(self, url):
-        # Check if we already scraped this exact URL in this session to prevent duplicate blocks
         with self.cache_lock:
             if url in self.cache:
-                # Return a copy of cached result with a slight time adjustment
-                cached_res = self.cache[url].copy()
-                return cached_res
+                return self.cache[url].copy()
 
         result = {
             'url': url,
@@ -81,7 +76,8 @@ class MetaExtractor:
                 result['error'] = 'Invalid URL format'
                 return result
             
-            response = self.session.get(url, timeout=10, allow_redirects=True)
+            # Strict 5-second timeout to prevent hanging on blocked/heavy sites
+            response = self.session.get(url, timeout=5, allow_redirects=True)
             result['status_code'] = response.status_code
             result['response_time'] = round((time.time() - start_time) * 1000, 2)
             result['content_length'] = len(response.content)
@@ -140,17 +136,16 @@ class MetaExtractor:
             
             result['status'] = 'success'
             
-            # Save to cache
             with self.cache_lock:
                 self.cache[url] = result
             
         except requests.exceptions.Timeout:
             result['status'] = 'error'
-            result['error'] = 'Request timeout'
-            result['response_time'] = round((time.time() - start_time) * 1000, 2)
+            result['error'] = 'Timeout (>5s - Blocked or Slow)'
+            result['response_time'] = 5000
         except requests.exceptions.RequestException as e:
             result['status'] = 'error'
-            result['error'] = str(e)
+            result['error'] = 'Connection Blocked/Failed'
             result['response_time'] = round((time.time() - start_time) * 1000, 2)
         except Exception as e:
             result['status'] = 'error'
@@ -176,8 +171,6 @@ def process_urls(urls, job_id, max_workers=5):
     jobs[job_id]['errors'] = 0
     
     results = []
-    
-    # Clear cache for new job
     extractor.cache.clear()
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
@@ -218,13 +211,10 @@ def index():
 @limiter.limit("10 per minute")
 def extract_meta_tags():
     data = request.json
-    
     if not data or 'urls' not in data:
         return jsonify({'error': 'No URLs provided'}), 400
     
-    urls = data['urls']
-    urls = [url.strip() for url in urls if url.strip()]
-    
+    urls = [url.strip() for url in data['urls'] if url.strip()]
     if not urls:
         return jsonify({'error': 'No valid URLs provided'}), 400
     
@@ -245,36 +235,17 @@ def extract_meta_tags():
         'urls': urls
     }
     
-    max_workers = data.get('workers', 5)
-    thread = threading.Thread(target=process_urls, args=(urls, job_id, max_workers))
+    thread = threading.Thread(target=process_urls, args=(urls, job_id, 5))
     thread.daemon = True
     thread.start()
     
-    return jsonify({
-        'job_id': job_id,
-        'message': f'Processing {len(urls)} URLs',
-        'status': 'queued'
-    })
+    return jsonify({'job_id': job_id, 'message': f'Processing {len(urls)} URLs', 'status': 'queued'})
 
 @app.route('/api/job/<job_id>')
 def get_job_status(job_id):
     if job_id not in jobs:
         return jsonify({'error': 'Job not found'}), 404
-    
     job = jobs[job_id]
-    
-    if job['status'] == 'processing':
-        return jsonify({
-            'job_id': job_id,
-            'status': job['status'],
-            'progress': job['progress'],
-            'total': job['total'],
-            'processed': job['processed'],
-            'success': job['success'],
-            'errors': job['errors'],
-            'results': job.get('results', [])[:10]
-        })
-    
     return jsonify({
         'job_id': job_id,
         'status': job['status'],
@@ -292,37 +263,21 @@ def get_job_status(job_id):
 def export_results(job_id, format):
     if job_id not in jobs:
         return jsonify({'error': 'Job not found'}), 404
-    
     job = jobs[job_id]
-    
     if job['status'] != 'completed':
         return jsonify({'error': 'Job not completed yet'}), 400
     
     results = job.get('results', [])
-    
     if format == 'csv':
         output = io.StringIO()
         if results:
-            fieldnames = results[0].keys()
-            writer = csv.DictWriter(output, fieldnames=fieldnames)
+            writer = csv.DictWriter(output, fieldnames=results[0].keys())
             writer.writeheader()
             writer.writerows(results)
         output.seek(0)
-        return send_file(
-            io.BytesIO(output.getvalue().encode('utf-8')),
-            mimetype='text/csv',
-            as_attachment=True,
-            download_name=f'meta_tags_{job_id}.csv'
-        )
-    
+        return send_file(io.BytesIO(output.getvalue().encode('utf-8')), mimetype='text/csv', as_attachment=True, download_name=f'meta_tags_{job_id}.csv')
     elif format == 'json':
-        return send_file(
-            io.BytesIO(json.dumps(results, indent=2).encode('utf-8')),
-            mimetype='application/json',
-            as_attachment=True,
-            download_name=f'meta_tags_{job_id}.json'
-        )
-    
+        return send_file(io.BytesIO(json.dumps(results, indent=2).encode('utf-8')), mimetype='application/json', as_attachment=True, download_name=f'meta_tags_{job_id}.json')
     return jsonify({'error': 'Invalid format'}), 400
 
 if __name__ == '__main__':
