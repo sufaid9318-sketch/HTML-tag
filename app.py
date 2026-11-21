@@ -1,5 +1,5 @@
 """
-Bulk Meta Tag Extractor - Public Ready Version (No Pandas/Excel compilation issues)
+Bulk Meta Tag Extractor - Pure Python Version (No C-compilation errors)
 """
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_cors import CORS
@@ -20,14 +20,12 @@ import os
 app = Flask(__name__)
 CORS(app)
 
-# Rate limiting for public security
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
     default_limits=["100 per day", "20 per hour"]
 )
 
-# Store processing jobs in memory
 jobs = {}
 
 class MetaExtractor:
@@ -40,7 +38,6 @@ class MetaExtractor:
         })
     
     def extract_meta(self, url):
-        """Extract all meta tags from a URL"""
         result = {
             'url': url,
             'status': 'pending',
@@ -85,6 +82,7 @@ class MetaExtractor:
                 result['error'] = f'HTTP {response.status_code}'
                 return result
             
+            # Using built-in html.parser (No lxml compilation needed)
             soup = BeautifulSoup(response.content, 'html.parser')
             
             title_tag = soup.find('title')
@@ -159,7 +157,6 @@ class MetaExtractor:
 extractor = MetaExtractor()
 
 def process_urls(urls, job_id, max_workers=10):
-    """Process multiple URLs in parallel"""
     jobs[job_id]['status'] = 'processing'
     jobs[job_id]['total'] = len(urls)
     jobs[job_id]['processed'] = 0
@@ -311,7 +308,7 @@ def export_results(job_id, format):
             download_name=f'meta_tags_{job_id}.json'
         )
     
-    return jsonify({'error': 'Invalid format (CSV and JSON supported)'}), 400
+    return jsonify({'error': 'Invalid format'}), 400
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
