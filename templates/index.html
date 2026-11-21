@@ -1,0 +1,494 @@
+<!-- templates/index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bulk Meta Tag Extractor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .main-content {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .main-content {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .card {
+            background: white;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        textarea {
+            width: 100%;
+            height: 300px;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            font-family: 'Courier New', monospace;
+            resize: vertical;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .btn {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 15px;
+            width: 100%;
+            transition: all 0.3s;
+        }
+
+        .btn:hover {
+            background: #5568d3;
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+        }
+
+        .btn-secondary:hover {
+            background: #5a6268;
+        }
+
+        .progress-container {
+            margin-top: 20px;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            width: 0%;
+            transition: width 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+        }
+
+        .stat-box {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .stat-box .value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .stat-box .label {
+            color: #666;
+            font-size: 0.9em;
+            margin-top: 5px;
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+
+        .results-table th,
+        .results-table td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+
+        .results-table th {
+            background: #667eea;
+            color: white;
+        }
+
+        .results-table tr:hover {
+            background: #f5f5f5;
+        }
+
+        .status-success {
+            color: #28a745;
+            font-weight: bold;
+        }
+
+        .status-error {
+            color: #dc3545;
+            font-weight: bold;
+        }
+
+        .status-processing {
+            color: #ffc107;
+            font-weight: bold;
+        }
+
+        .export-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 20px;
+        }
+
+        .export-buttons button {
+            flex: 1;
+        }
+
+        .url-count {
+            text-align: right;
+            color: #666;
+            margin-top: 10px;
+            font-size: 0.9em;
+        }
+
+        .info-box {
+            background: #e7f3ff;
+            border-left: 4px solid #667eea;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+        }
+
+        .info-box h3 {
+            color: #667eea;
+            margin-bottom: 10px;
+        }
+
+        .info-box ul {
+            margin-left: 20px;
+        }
+
+        .info-box li {
+            margin: 5px 0;
+            color: #555;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid #f3f3f3;
+            border-top: 3px solid #667eea;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-right: 10px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results-container {
+            max-height: 500px;
+            overflow-y: auto;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔍 Bulk Meta Tag Extractor</h1>
+            <p>Extract meta tags, descriptions, and Open Graph data from thousands of URLs</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Input Section -->
+            <div class="card">
+                <h2>📝 Enter URLs</h2>
+                <p style="color: #666; margin-bottom: 15px;">
+                    Paste URLs (one per line). Supports up to 5,000 URLs.
+                </p>
+                <textarea id="urlInput" placeholder="https://example.com&#10;https://example2.com&#10;https://example3.com"></textarea>
+                <div class="url-count">
+                    <span id="urlCount">0</span> URLs entered
+                </div>
+                <button class="btn" id="extractBtn" onclick="startExtraction()">
+                    🚀 Extract Meta Tags
+                </button>
+                <div class="info-box">
+                    <h3>ℹ️ What Gets Extracted:</h3>
+                    <ul>
+                        <li>Page Title</li>
+                        <li>Meta Description</li>
+                        <li>Meta Keywords</li>
+                        <li>Open Graph Tags (og:title, og:description, og:image)</li>
+                        <li>Twitter Card Tags</li>
+                        <li>Canonical URL</li>
+                        <li>Robots Meta</li>
+                        <li>Author, Charset, Language</li>
+                        <li>HTTP Status Code</li>
+                        <li>Response Time</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="card">
+                <h2>📊 Results</h2>
+                
+                <div id="progressSection" class="hidden">
+                    <div class="progress-container">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill">0%</div>
+                        </div>
+                    </div>
+                    <div class="stats">
+                        <div class="stat-box">
+                            <div class="value" id="statTotal">0</div>
+                            <div class="label">Total</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="value" id="statSuccess">0</div>
+                            <div class="label">Success</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="value" id="statErrors">0</div>
+                            <div class="label">Errors</div>
+                        </div>
+                        <div class="stat-box">
+                            <div class="value" id="statProgress">0%</div>
+                            <div class="label">Progress</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="results-container">
+                    <table class="results-table" id="resultsTable">
+                        <thead>
+                            <tr>
+                                <th>URL</th>
+                                <th>Title</th>
+                                <th>Description</th>
+                                <th>Status</th>
+                                <th>Time (ms)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody">
+                            <tr>
+                                <td colspan="5" style="text-align: center; color: #999; padding: 40px;">
+                                    Results will appear here after extraction
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="export-buttons hidden" id="exportButtons">
+                    <button class="btn btn-secondary" onclick="exportResults('csv')">
+                        📥 Export CSV
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportResults('json')">
+                        📥 Export JSON
+                    </button>
+                    <button class="btn btn-secondary" onclick="exportResults('excel')">
+                        📥 Export Excel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentJobId = null;
+        let checkInterval = null;
+
+        // Update URL count
+        document.getElementById('urlInput').addEventListener('input', function() {
+            const urls = this.value.split('\n').filter(url => url.trim());
+            document.getElementById('urlCount').textContent = urls.length;
+        });
+
+        // Start extraction
+        async function startExtraction() {
+            const urlInput = document.getElementById('urlInput').value;
+            const urls = urlInput.split('\n').filter(url => url.trim());
+
+            if (urls.length === 0) {
+                alert('Please enter at least one URL');
+                return;
+            }
+
+            if (urls.length > 5000) {
+                alert('Maximum 5000 URLs allowed. Please reduce your list.');
+                return;
+            }
+
+            const btn = document.getElementById('extractBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span> Processing...';
+
+            try {
+                const response = await fetch('/api/extract', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        urls: urls,
+                        max_urls: 5000,
+                        workers: 10
+                    })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    currentJobId = data.job_id;
+                    document.getElementById('progressSection').classList.remove('hidden');
+                    startProgressCheck();
+                } else {
+                    alert('Error: ' + data.error);
+                    btn.disabled = false;
+                    btn.innerHTML = '🚀 Extract Meta Tags';
+                }
+            } catch (error) {
+                alert('Error: ' + error.message);
+                btn.disabled = false;
+                btn.innerHTML = '🚀 Extract Meta Tags';
+            }
+        }
+
+        // Check progress
+        async function startProgressCheck() {
+            checkInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/api/job/${currentJobId}`);
+                    const data = await response.json();
+
+                    updateProgress(data);
+
+                    if (data.status === 'completed') {
+                        clearInterval(checkInterval);
+                        document.getElementById('extractBtn').disabled = false;
+                        document.getElementById('extractBtn').innerHTML = '🚀 Extract Meta Tags';
+                        document.getElementById('exportButtons').classList.remove('hidden');
+                    }
+                } catch (error) {
+                    console.error('Error checking progress:', error);
+                }
+            }, 1000);
+        }
+
+        // Update progress UI
+        function updateProgress(data) {
+            document.getElementById('progressFill').style.width = data.progress + '%';
+            document.getElementById('progressFill').textContent = data.progress + '%';
+            document.getElementById('statTotal').textContent = data.total;
+            document.getElementById('statSuccess').textContent = data.success;
+            document.getElementById('statErrors').textContent = data.errors;
+            document.getElementById('statProgress').textContent = data.progress + '%';
+
+            // Update results table
+            if (data.results && data.results.length > 0) {
+                const tbody = document.getElementById('resultsBody');
+                tbody.innerHTML = '';
+
+                data.results.forEach(result => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">
+                            ${result.url}
+                        </td>
+                        <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;">
+                            ${result.title || '-'}
+                        </td>
+                        <td style="max-width: 300px; overflow: hidden; text-overflow: ellipsis;">
+                            ${result.description || '-'}
+                        </td>
+                        <td class="${result.status === 'success' ? 'status-success' : 'status-error'}">
+                            ${result.status === 'success' ? '✓ Success' : '✗ ' + (result.error || 'Error')}
+                        </td>
+                        <td>${result.response_time || '-'}</td>
+                    `;
+                    tbody.appendChild(row);
+                });
+            }
+        }
+
+        // Export results
+        function exportResults(format) {
+            window.open(`/api/export/${currentJobId}/${format}`, '_blank');
+        }
+    </script>
+</body>
+</html>
