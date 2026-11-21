@@ -1,5 +1,5 @@
 """
-Bulk Meta Tag Extractor - Pure Python Version (No C-compilation errors)
+Bulk Meta Tag Extractor - Handles duplicate URLs and fast processing
 """
 from flask import Flask, render_template, request, jsonify, send_file
 from flask_cors import CORS
@@ -29,15 +29,24 @@ limiter = Limiter(
 jobs = {}
 
 class MetaExtractor:
-    """Extract meta tags from URLs"""
+    """Extract meta tags from URLs with caching for duplicates"""
     
     def __init__(self):
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         })
+        self.cache = {} # Cache results for duplicate URLs in the same job
+        self.cache_lock = threading.Lock()
     
     def extract_meta(self, url):
+        # Check if we already scraped this exact URL in this session to prevent duplicate blocks
+        with self.cache_lock:
+            if url in self.cache:
+                # Return a copy of cached result with a slight time adjustment
+                cached_res = self.cache[url].copy()
+                return cached_res
+
         result = {
             'url': url,
             'status': 'pending',
@@ -82,7 +91,6 @@ class MetaExtractor:
                 result['error'] = f'HTTP {response.status_code}'
                 return result
             
-            # Using built-in html.parser (No lxml compilation needed)
             soup = BeautifulSoup(response.content, 'html.parser')
             
             title_tag = soup.find('title')
@@ -132,6 +140,10 @@ class MetaExtractor:
             
             result['status'] = 'success'
             
+            # Save to cache
+            with self.cache_lock:
+                self.cache[url] = result
+            
         except requests.exceptions.Timeout:
             result['status'] = 'error'
             result['error'] = 'Request timeout'
@@ -156,7 +168,7 @@ class MetaExtractor:
 
 extractor = MetaExtractor()
 
-def process_urls(urls, job_id, max_workers=10):
+def process_urls(urls, job_id, max_workers=5):
     jobs[job_id]['status'] = 'processing'
     jobs[job_id]['total'] = len(urls)
     jobs[job_id]['processed'] = 0
@@ -164,6 +176,9 @@ def process_urls(urls, job_id, max_workers=10):
     jobs[job_id]['errors'] = 0
     
     results = []
+    
+    # Clear cache for new job
+    extractor.cache.clear()
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         future_to_url = {executor.submit(extractor.extract_meta, url): url for url in urls}
@@ -230,7 +245,7 @@ def extract_meta_tags():
         'urls': urls
     }
     
-    max_workers = data.get('workers', 10)
+    max_workers = data.get('workers', 5)
     thread = threading.Thread(target=process_urls, args=(urls, job_id, max_workers))
     thread.daemon = True
     thread.start()
